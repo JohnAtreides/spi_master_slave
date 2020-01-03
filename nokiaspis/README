@@ -1,0 +1,11 @@
+Hello Arnaud,
+On a modifié une ligne dans PCD8544.cpp et donc dans PCD8544.h aussi.
+Ils sont tous deux dans .../nokiaspis/src/
+
+De 
+void drawString(char str); (on qq chose comme ça ^^)
+on est passé à
+void drawString(const char *str);
+
+La fct drawString sert à écrire une chaine de caratères.
+Le const a été rajouté pour ne pas qu'on puisse modifié le string qui est passé en paramêtre.
