@@ -20,6 +20,9 @@ volatile uint32_t buttonState(0);
 int32_t txbuffer[100];
 int32_t rxbuffer[100];
 
+int dataMode = 0;     //mode selon appuie btn
+const int nbMode = 5; //constant qui déf le nombre de modes
+
 void buttonUp()
 {
     txbuffer[0] = 0;
@@ -28,14 +31,17 @@ void buttonUp()
 void buttonDown()
 {
     txbuffer[0] = 1;
+    dataMode++;
+    dataMode %= nbMode; // pour que 0<=dataMode<nbMode
 }
 
-void showdata(int dataNbr, int LineArray);
+void display(int x, int y, const char *string);
+void showdata();
 
 void ledoff()
 {
     led = 0;
-    showdata(0, 0);
+    showdata();
 }
 
 void received_data()
@@ -44,56 +50,92 @@ void received_data()
     queue.call_in(1, ledoff);
 }
 
-void showdata(int dataNbr, int lineArray)
-{
-    int32_t data = rxbuffer[dataNbr];
-    char string[20];
-    lcd.setXY(40, lineArray);
-    sprintf(string, "       ");
-    lcd.drawString(string);
-    lcd.setXY(40, lineArray);
-    sprintf(string, "%6d", (int)data);
-    lcd.drawString(string);
-    //txbuffer[0] = buttonState;
+// ajout compteur de temps
+unsigned int lotOfSec = 0;
 
-    spis.transfer(reinterpret_cast<uint8_t *>(txbuffer), 4, reinterpret_cast<uint8_t *>(rxbuffer), 100, received_data);
+typedef struct temps
+{
+    unsigned int hour;
+    unsigned int minute;
+    unsigned int second;
+} temps_t;
+
+temps_t cutTime(unsigned int);
+
+temps_t cutTime(unsigned int lotOfSec)
+{
+    temps_t hoMiSe; //hourMInuteSEcond..
+    hoMiSe.hour = lotOfSec / 3600;
+    lotOfSec %= 3600;
+    hoMiSe.minute = lotOfSec / 60;
+    lotOfSec = lotOfSec % 60;
+    hoMiSe.second = lotOfSec;
+
+    return hoMiSe;
+}
+// fin compteur temps
+
+temps_t result;
+
+void showdata()
+{
+    char txt2Display[30];
+    lcd.clear();
+
+    uint32_t temperature = rxbuffer[0];
+    uint32_t lotOfSec = rxbuffer[1];
+
+    switch (dataMode)
+    {
+    case 0:
+        sprintf(txt2Display, "Temp : %u", temperature);
+        display(0, 0, txt2Display);
+        break;
+
+    case 1:
+        display(26, 1, "UpTime");
+        sprintf(txt2Display, "On Since %us", lotOfSec);
+        display(0, 2, txt2Display);
+        break;
+
+    case 2:
+        result = cutTime(lotOfSec);
+        sprintf(txt2Display, "h:%02u m:%02u s:%02u", result.hour, result.minute, result.second);
+        display(6, 1, "UpTime h/m/s");
+        display(0, 2, txt2Display);
+        break;
+
+    case 3:
+        sprintf(txt2Display, "Temp : %u", temperature);
+        display(0, 0, txt2Display);
+        
+        display(26, 2, "UpTime");
+        sprintf(txt2Display, "On Since %us", lotOfSec);
+        display(0, 3, txt2Display);
+        
+        result = cutTime(lotOfSec);
+        sprintf(txt2Display, "h:%02u m:%02u s:%02u", result.hour, result.minute, result.second);
+        display(0, 5, txt2Display);
+        break;
+
+    case 4:
+        sprintf(txt2Display, "u32:%d", sizeof(unsigned int));
+        display( 0, 4, txt2Display);
+        break;
+
+    default:
+        break;
+    }
+
+    spis.transfer(reinterpret_cast<uint8_t *>(txbuffer), 4,
+                  reinterpret_cast<uint8_t *>(rxbuffer), 8, received_data);
 }
 
-
-/*
-    int32_t data2=rxbuffer[4];
-    //char string[20];
-    lcd.setXY(40,0);
-    sprintf(string,"%6d",(int)data2);
+void display(int x, int y, const char *string)
+{
+    lcd.setXY(x, y);
     lcd.drawString(string);
-
-    // -------cutTime display
-    //lotOfSec
-    int32_t data2=rxbuffer[2];
-    lcd.setXY(40,0);
-    sprintf(string,"%6d",(int)data2);
-    lcd.drawString(string);
-    //hours
-    int32_t data4=rxbuffer[4];
-    lcd.setXY(40,0);
-    sprintf(string,"%6d",(int)data4);
-    lcd.drawString(string);
-    //minutes
-    int32_t data6=rxbuffer[6];
-    lcd.setXY(40,0);
-    sprintf(string,"%6d",(int)data6);
-    lcd.drawString(string);
-    //seconds
-    int32_t data8=rxbuffer[8];
-    lcd.setXY(40,0);
-    sprintf(string,"%6d",(int)data8);
-    lcd.drawString(string);
-    // --------end cutTime display
-    
-
-    
-    spis.transfer(reinterpret_cast<uint8_t *>(txbuffer), 4, reinterpret_cast<uint8_t *>(rxbuffer), 100, received_data);
-*/
+}
 
 int main()
 {
@@ -101,19 +143,11 @@ int main()
     button.rise(buttonUp);
     button.fall(buttonDown); //
 
-    char string[20];
-
     ThisThread::sleep_for(100);
 
     lcd.activate();
-    sprintf(string, "Temp: ");
-    lcd.drawString(string);
     rxbuffer[0] = 42;
-    showdata(0,0);
-    lcd.setXY(0,2);
-    sprintf(string, "Time: ");
-    lcd.drawString(string);
-    showdata(4,2);
+    showdata();
 
     queue.dispatch_forever();
 }
